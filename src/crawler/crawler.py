@@ -1,71 +1,30 @@
 from bs4 import BeautifulSoup
 import requests
 
+BASE_URL = "https://projects.propublica.org"
+
 
 class Police_department:
-    headers = {
-        'authority': 'api.sail-personalize.com',
-        'sec-ch-ua': '"Google Chrome";v="95", "Chromium";v="95", ";Not A Brand";v="99"',
-        'x-lib-version': 'v1.0.1',
-        'sec-ch-ua-mobile': '?0',
-        'authorization': 'Bearer c1d320b4976cc13366759531bf948c3a',
-        'content-type': 'application/json',
-        'accept': 'application/json',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
-        'x-referring-url': 'https://projects.propublica.org/nypd-ccrb/search?q=Matthew',
-        'sec-ch-ua-platform': '"Linux"',
-        'origin': 'https://projects.propublica.org',
-        'sec-fetch-site': 'cross-site',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-dest': 'empty',
-        'referer': 'https://projects.propublica.org/',
-        'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-    }
 
-    params = (
-        ('pageviews', '9'),
-        ('isMobile', '0'),
-        ('page', 'q=Matthew'),
-        ('visitorId', 'd1775018-91cf-4dd0-b63d-8047c6f43264'),
-        ('content',
-         'f34d7b53a60083cf80a6023607c20d948f5593e58c2e6b393b03d24efdd64b0630d17ae660218a72664188a446fba9eadead7d12ef0b870cd7bf03b6c85caa1c1bb602ede1cab9b22ce5a80b2a9dbc83744efcc450bd64064b9dcbfb86a237b285ffbbcad6993b9c83e4e387678edc27'),
-    )
+    def make_request(self, url: str, params: dict = None):
+        response = requests.get(BASE_URL + url, params=params)
+        if response.ok:
+            return response.text
 
-    def __init__(self, main_url):
-        self.main_url = main_url
-
-    def make_request(self, url):
-        response = requests.get(url=url)
-        return response.text
-
-    def get_object(self):
-        response = requests.get('https://api.sail-personalize.com/v1/personalize/simple', headers=self.headers,
-                                params=self.params)
+    def get_soup(self, html):
+        response = BeautifulSoup(html, "html.parser")
         return response
 
-    def search(self):
-        pass
+    def get_info(self, fullname: str):
+        params = {'q': fullname}
+        response = self.make_request("/nypd-ccrb/search", params)
+        links = self.get_links(response)
+        return self.parse_link(links)
 
-
-    def get_proxy(self):
-        url = "https://api.getproxylist.com/proxy?apiKey=f6c61e5fd4f84be48eecb62b8ceed766e7009340&maxConnectTime=1&minUptime=80&protocol=http&allowsHttps=1"
-
-        response = requests.get(url)
-        res = response.json()
-        ip = res.get('ip')
-        port = res.get('port')
-        print(ip, port)
-
-        proxy = {
-            "http": f"http://{ip}:{port}",
-            "https": f"http://{ip}:{port}"
-        }
-        return proxy
-
-    def get_links(self, url, retries: int = 3):
+    def get_links(self, html, retries: int = 3):
         while retries > 0:
             retries -= 1
-            html = self.make_request(url)
+
             soup = BeautifulSoup(html, "html.parser")
 
             links = []
@@ -78,12 +37,10 @@ class Police_department:
             for element in li:
                 a = element.find("a")
                 element_url = a.get("href")
-                element_url = self.main_url + element_url
+                element_url =  element_url
                 links.append(element_url)
-            return links
 
-    def get_soup(self, html):
-        return BeautifulSoup(html, "html.parser")
+            return links
 
     def parse_link(self, links: list):
         result = []
@@ -108,7 +65,7 @@ class Police_department:
         try:
             fullname = soup.find("div", class_="fw7 f2-l f4-m f5 lh-title tiempos-text").text
         except AttributeError:
-            print("This policeman is without a name")
+            print("Fullname wasn't found")
             return None
         return fullname
 
@@ -122,10 +79,8 @@ class Police_department:
         result = ''.join(desc_list)
         return result
 
-    def loop(self):
-        links = self.get_links(self.main_url)
-        return self.parse_link(links)
-
 
 if __name__ == "__main__":
-    Police_department("https://projects.propublica.org/nypd-ccrb/search?q=Gregory+Smith").loop()
+    result = Police_department().get_info("Matthew")
+    print(result)
+

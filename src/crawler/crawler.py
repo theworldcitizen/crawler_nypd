@@ -69,7 +69,8 @@ class Crawler:
                 fullname = self.get_fullname(soup)
                 if fullname is not None:
                     description = self.get_description(soup)
-                    user = User(fullname=fullname, description=description, link=link)
+                    appearance = self.get_appearance(soup)
+                    user = User(fullname=fullname, description=description, link=link, appearance=appearance)
                     result.append(user)
         return result
 
@@ -92,7 +93,12 @@ class Crawler:
         result = ''.join(description_list)
         return result
 
+    @staticmethod
+    def get_appearance(soup: BeautifulSoup):
+        appearance = soup.find("div", class_="fw5 f4-l f5-m f5 lh-title tiempos-text").text
+        return appearance
+
 
 if __name__ == "__main__":
-    result = Crawler().get_info("Matthew")
+    result = Crawler().get_info("Gregory Smith")
     print(result)

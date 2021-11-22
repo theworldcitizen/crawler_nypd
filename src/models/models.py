@@ -9,24 +9,24 @@ class Info(BaseModel):
     fullname: str
     appearance: str
     rank: str
-    # precinct: str
+    precinct: str
     units: list #actually array
-    total_complaints: str #actually int
-    total_allegations: str #actually int
-    substantiated_allegations: str #expected to be int
+    total_complaints: int
+    total_allegations: int
+    substantiated_allegations: int
 
 class Complaints(BaseModel):
-    date: str
-    # rank_at_time: str
-    officer_details: str
-    # complaint_details: str
-    # allegations: str
-    # ccrb_conclusion: str
+    date: list #expected to be string
+    rank_at_time: list
+    # officer_details: str
+    complaint_details: str
+    allegations: str
+    ccrb_conclusion: str
 
 
 
-# class Result(BaseModel):
-#     platform_id = 'nypd'
-#     url: str
-#     info: Info
-#     complaint: Complaint
+class Data(BaseModel):
+    # platform_id = 'nypd'
+    # url: str
+    info: Info
+    complaint: Complaints

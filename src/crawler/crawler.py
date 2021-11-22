@@ -1,8 +1,8 @@
-from typing import List
+from typing import List, Tuple
 
 from bs4 import BeautifulSoup
 import requests
-from models import Info, Complaints
+from models import Info, Complaints, Data
 
 BASE_URL = "https://projects.propublica.org"
 
@@ -62,6 +62,8 @@ class Crawler:
     def parse_link(self, links: list) -> tuple[list[Info], list[Complaints]]:
         info_about_policeman = []
         complaints = []
+
+        data = []
         if links:
             for link in links:
                 html = self.make_request(link)
@@ -72,24 +74,32 @@ class Crawler:
                     link = BASE_URL + link
                     rank = self.get_rank(soup)
                     appearance = self.get_appearance(soup)
-                    # precinct = self.get_precinct(soup)
+                    precinct = self.get_precinct(soup)
                     units = self.get_units(soup)
                     total_substantiated_allegations = self.get_number_of_substantiated_allegations(soup)
                     total_complaints = self.get_number_of_complaints(soup)
                     total_allegations = self.get_number_of_allegations(soup)
 
                     date_of_complaint = self.get_date_of_complaint(soup)
-                    # rank_at_time = self.get_rank_at_time(soup)
+                    rank_at_time = self.get_rank_at_time(soup)
                     complainant_info = self.get_complainant_info(soup)
+                    # info_about_officer = self.get_info_about_officer(soup)
+                    allegation = self.get_allegations(soup)
+                    conclusion = self.get_ccrb_conclusion(soup)
 
-                    policemen = Info(link=link, fullname=fullname, appearance=appearance, rank=rank,
+                    policemen = Info(link=link, fullname=fullname, appearance=appearance, rank=rank, precinct=precinct,
                                      units=units, total_complaints=total_complaints,
                                      total_allegations=total_allegations,
                                      substantiated_allegations=total_substantiated_allegations)
                     info_about_policeman.append(policemen)
 
-                    complaint = Complaints(date=date_of_complaint, officer_details=complainant_info)
+                    complaint = Complaints(date=date_of_complaint, rank_at_time=rank_at_time,
+                                           complaint_details=complainant_info, allegations=allegation,
+                                           ccrb_conclusion=conclusion)
                     complaints.append(complaint)
+
+                    # result = Data(info=info_about_policeman, complaint=complaints)
+                    # data.append(result)
         return info_about_policeman, complaints
 
     @staticmethod
@@ -102,16 +112,6 @@ class Crawler:
         return fullname
 
     @staticmethod
-    def get_description(soup: BeautifulSoup):
-        description = soup.find("div", class_="f5 mw7 tiempos-text pt3")
-        description_list = []
-        for desc in description:
-            short_description = desc.text
-            description_list.append(short_description)
-        result = ''.join(description_list)
-        return result
-
-    @staticmethod
     def get_appearance(soup: BeautifulSoup):
         items = soup.find_all("div", class_="fw5 f4-l f5-m f5 lh-title tiempos-text")
         appearance = items[1].text
@@ -119,12 +119,11 @@ class Crawler:
 
     @staticmethod
     def get_rank(soup: BeautifulSoup):
-        empty_list = []
         info = soup.find("div", class_="fw5 f4-l f5-m f5 lh-title tiempos-text").text
-        empty_list.append(info)
-        # rank = [full_info(' ').pop(0) for full_info in empty_list]
-        rank = empty_list[-1]
-        return rank  # todo: get the 1st element
+        if info:
+            info = info.split(',')
+        rank = info[0].strip()
+        return rank
 
     @staticmethod
     def get_precinct(soup: BeautifulSoup):
@@ -132,7 +131,7 @@ class Crawler:
             full_info = soup.find("div", class_="fw5 f4-l f5-m f5 lh-title tiempos-text")
             a = full_info.find('a')
             precinct = a.text
-            return precinct  # todo some has precinct, but others do not
+            return precinct  # todo: some has precinct, but others do not
         except Exception as e:
             print("Precinct wasn't found")
 
@@ -147,45 +146,123 @@ class Crawler:
     def get_number_of_complaints(soup: BeautifulSoup):
         all_divs = soup.find_all("div", class_="f4-l f5 lh-title tiempos-text")
         total_complaints = all_divs[1].text
-        return total_complaints
+        res = int(total_complaints)
+        return res
 
     @staticmethod
     def get_number_of_allegations(soup: BeautifulSoup):
         all_divs = soup.find_all("div", class_="f4-l f5 lh-title tiempos-text")
         total_allegations = all_divs[2].text
-        return total_allegations
+        res = int(total_allegations)
+        return res
+
+    # if info:
+    #     info = info.split(',')
+    # rank = info[0].strip()
 
     @staticmethod
     def get_number_of_substantiated_allegations(soup: BeautifulSoup):
         all_divs = soup.find_all("div", class_="f4-l f5 lh-title tiempos-text")
         total_substantiated_allegations = all_divs[3].text
-        return total_substantiated_allegations
+        res = int(total_substantiated_allegations)
+        return res
 
+    # todo STARTING POINT FOR COMPLAINTS
     @staticmethod
-    def get_date_of_complaint(soup: BeautifulSoup):
-        content = soup.find("h2", class_="f4-l f5 color-dark fw7 lh-title tiempos-text pb3").text
-        date = content[22:]  # works, but are there any other methods?
-        return date
+    def get_date_of_complaint(soup: BeautifulSoup) -> List:
+        all_contents = soup.find_all("h2", class_="f4-l f5 color-dark fw7 lh-title tiempos-text pb3")
+        date_list = []
+        for row in all_contents:
+            content = row.text
+            date = content[22:]
+            date_list.append(date)  # works, but are there any other methods?
+        return date_list  # -> todo: List[dates]
+
+    # @staticmethod
+    # def get_rank_at_time(soup: BeautifulSoup):
+    #     list_of_ranks = []
+    #     tables = soup.find_all("table", class_="table medium tablesaw-stack f6 bg")
+    #     table_rows = tables.find_all('tr')
+    #     for tr in table_rows:
+    #         td = [td for td in tr.stripped_strings]
+    #         print(td)
+    #         # td = tr.find_all('td')
+    #         # for i in td:
+    #         #     row = i.text
+    #     return td
+
 
     @staticmethod
     def get_rank_at_time(soup: BeautifulSoup):
-        complaint_details = []
-        data = soup.find("div", class_="pr4 pb3 w-100").find("table",
-                                                             class_="table medium tablesaw-stack f6 bg tablesaw-sortable").find(
-            "tbody")
+        list_of_ranks = []
+        tables = soup.find_all("table", class_="table medium tablesaw-stack f6 bg")
+        for table in tables:  # тут берет только первую таблицу, а нужно было чтобы всё брал
+            all_bodies = table.find_all("tbody")
+            for body in all_bodies:
+                rows = body.find_all("tr")
+                for row in rows:
+                    content = row.text
+                    all_row = content.splitlines()
+                    rank_at_time = all_row[3]
+                    list_of_ranks.append(rank_at_time)
 
-        content = data.find_all("tr").text
-        complaint_details.append(content)
-        return complaint_details  # todo: path is wrong
+            return list_of_ranks
+
+    # @staticmethod
+    # def get_rank_at_time(soup: BeautifulSoup):
+    #     table = soup.find("table", class_="table medium tablesaw-stack f6 bg")
+    #     body = table.find("tbody")
+    #     rows = body.find_all("tr")
+    #     for row in rows:
+    #         content = row.text
+    #         whole_row = content.splitlines()
+    #         rank_at_time = whole_row[3]
+    #     return rank_at_time
 
     @staticmethod
     def get_complainant_info(soup: BeautifulSoup):
-        content = soup.find("div", class_="pr4 pb3 w-100").find("table").find("tbody").find_all("tr")
-        for item in content:
-            result = item.find("span", class_="tablesaw-cell-content").text
-            return result #todo: path is wrong
+        content = soup.find("table", class_="table medium tablesaw-stack f6 bg")
+        body = content.find("tbody")
+        rows = body.find_all("tr")
+        for row in rows:
+            content = row.text
+            all_row = content.splitlines()
+            complaint_info = all_row[2]
+            return complaint_info
+
+    @staticmethod
+    def get_info_about_officer(soup: BeautifulSoup, self=None):
+        content = soup.find("div", class_="mb5")
+        a = content.find("a")
+        url_of_element = a.get("href")
+        response = self.make_request(url_of_element)
+        print(response)  # no response
+
+    @staticmethod
+    def get_allegations(soup: BeautifulSoup):
+        content = soup.find("table", class_="table medium tablesaw-stack f6 bg")
+        body = content.find("tbody")
+        rows = body.find_all("tr")
+        for row in rows:
+            content = row.text
+            all_row = content.splitlines()
+            allegation = all_row[1]
+            return allegation
+
+    @staticmethod
+    def get_ccrb_conclusion(soup: BeautifulSoup):
+        content = soup.find("table", class_="table medium tablesaw-stack f6 bg")
+        body = content.find("tbody")
+        rows = body.find_all("tr")
+        for row in rows:
+            content = row.text
+            all_row = content.splitlines()
+            conclusion = all_row[4]
+            return conclusion
 
 
 if __name__ == "__main__":
-    result = Crawler().get_info("Ruslan")
+    result = Crawler().get_info("Sasha Rosen")
     print(result)
+
+    # Sasha Rosen

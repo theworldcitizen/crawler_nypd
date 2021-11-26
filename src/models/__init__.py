@@ -1,1 +1,1 @@
-from .models import Info, Complaints, Data
+from .models import Info, Complaint, Data

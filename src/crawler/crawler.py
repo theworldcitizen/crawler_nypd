@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 from bs4 import BeautifulSoup
 import requests
-from models import Info, Complaints, Data
+from models import Info, Complaint, Data
 
 BASE_URL = "https://projects.propublica.org"
 
@@ -23,6 +23,12 @@ class Crawler:
 
     }
 
+    def get_info(self, fullname: str):
+        params = {'q': fullname}
+        html = self.make_request("/nypd-ccrb/search", params)
+        links = self.get_links(html)
+        return self.get_info_by_fullname(links, fullname)
+
     def make_request(self, url: str, params: dict = None):
         response = requests.get(BASE_URL + url, params=params, headers=self.headers)
         if response.ok:
@@ -32,19 +38,13 @@ class Crawler:
         soup = BeautifulSoup(html, "html.parser")
         return soup
 
-    def get_info(self, fullname: str):
-        params = {'q': fullname}
-        html = self.make_request("/nypd-ccrb/search", params)
-        links = self.get_links(html)
-        return self.parse_link(links)
-
     def get_links(self, html, retries: int = 3):
         while retries > 0:
             retries -= 1
 
             soup = self.get_soup(html)
 
-            links = []
+            link_fullname = []
             all_links = soup.find("div", class_="pr3-ns pt3 w-70-l w-100").find("ul")
             if all_links:
                 li = all_links.find_all("li")
@@ -53,54 +53,111 @@ class Crawler:
 
             for element in li:
                 a = element.find("a")
+                fullname = a.text
                 element_url = a.get("href")
                 element_url = element_url
-                links.append(element_url)
+                link_fullname.append({'fullname': fullname, 'link': element_url})
 
-            return links
+            return link_fullname
 
-    def parse_link(self, links: list) -> tuple[list[Info], list[Complaints]]:
+    def get_info_by_fullname(self, link_fullname: list,
+                             fullname_from_request):  # -> tuple[list[Info], list[Complaints]]:
         info_about_policeman = []
         complaints = []
 
         data = []
-        if links:
-            for link in links:
-                html = self.make_request(link)
+        if link_fullname:
+            for link in link_fullname:
+                url = link.get('link')
+                fullname = link.get('fullname')
+                if fullname.lower() != fullname_from_request.lower():
+                    continue
+                html = self.make_request(url)
                 soup = self.get_soup(html)
+
                 fullname = self.get_fullname(soup)
-                if fullname is not None:
-                    # description = self.get_description(soup)
-                    link = BASE_URL + link
-                    rank = self.get_rank(soup)
-                    appearance = self.get_appearance(soup)
-                    precinct = self.get_precinct(soup)
-                    units = self.get_units(soup)
-                    total_substantiated_allegations = self.get_number_of_substantiated_allegations(soup)
-                    total_complaints = self.get_number_of_complaints(soup)
-                    total_allegations = self.get_number_of_allegations(soup)
+        return fullname
 
-                    date_of_complaint = self.get_date_of_complaint(soup)
-                    rank_at_time = self.get_rank_at_time(soup)
-                    complainant_info = self.get_complainant_info(soup)
-                    # info_about_officer = self.get_info_about_officer(soup)
-                    allegation = self.get_allegations(soup)
-                    conclusion = self.get_ccrb_conclusion(soup)
+        # if fullname is not None:
+        #     # description = self.get_description(soup)
+        #     link = BASE_URL + link
+        #     rank = self.get_rank(soup)
+        #     appearance = self.get_appearance(soup)
+        #     precinct = self.get_precinct(soup)
+        #     units = self.get_units(soup)
+        #     total_substantiated_allegations = self.get_number_of_substantiated_allegations(soup)
+        #     total_complaints = self.get_number_of_complaints(soup)
+        #     total_allegations = self.get_number_of_allegations(soup)
+        #
+        #     date_of_complaint = self.get_date_of_complaint(soup)
+        #     rank_at_time = self.get_rank_at_time(soup)
+        #     complainant_info = self.get_complainant_info(soup)
+        #     # info_about_officer = self.get_info_about_officer(soup)
+        #     allegation = self.get_allegations(soup)
+        #     conclusion = self.get_ccrb_conclusion(soup)
+        #
+        #      policemen = Info(link=link, fullname=fullname, appearance=appearance, rank=rank, precinct=precinct,
+        #                  units=units, total_complaints=total_complaints,
+        #                  total_allegations=total_allegations,
+        #                  substantiated_allegations=total_substantiated_allegations)
+        #     info_about_policeman.append(policemen)
+        #
+        #     complaint = Complaints(date=date_of_complaint, rank_at_time=rank_at_time,
+        #                            complaint_details=complainant_info, allegations=allegation,
+        #                            ccrb_conclusion=conclusion)
+        #     complaints.append(complaint)
 
-                    policemen = Info(link=link, fullname=fullname, appearance=appearance, rank=rank, precinct=precinct,
-                                     units=units, total_complaints=total_complaints,
-                                     total_allegations=total_allegations,
-                                     substantiated_allegations=total_substantiated_allegations)
-                    info_about_policeman.append(policemen)
+        # result = Data(info=info_about_policeman, complaint=complaints)
+        # data.append(result)
 
-                    complaint = Complaints(date=date_of_complaint, rank_at_time=rank_at_time,
-                                           complaint_details=complainant_info, allegations=allegation,
-                                           ccrb_conclusion=conclusion)
-                    complaints.append(complaint)
+    def main(self):
+        all_complaints: List[Complaint] = []  # все жалобы
+        links: List[str] = self.get_more_details()
+        for link in links:
+            complaints: List[Complaint] = self.parse_link(link)  # complaints for period (contains several policemen)
+            all_complaints.extend(complaints)
 
-                    # result = Data(info=info_about_policeman, complaint=complaints)
-                    # data.append(result)
-        return info_about_policeman, complaints
+    def parse_link(self, link: str) -> List[Complaint]:
+        html = self.make_request(link)
+        soup = self.get_soup(html)
+
+        complaints = []
+
+        content = soup.find_all("table", class_="table medium tablesaw-stack f6 tablesaw-sortable").find("tbody")
+        rows = content.find_all("tr")
+
+        for row in rows:
+            content = row.text
+            all_row = content.splitlines()
+            name_of_officer = all_row[0]
+            if name_of_officer == self.get_fullname():
+                date = self.get_date_of_complaint(soup)
+                rank_at_the_time_of_incident = self.get_rank_at_time(soup)
+                officer_details = self.get_info_about_officer(soup)
+                complainant_links = self.get_info_about_complainant(soup)
+                allegations = self.get_allegations(soup)
+                conclusion = self.get_ccrb_conclusion(soup)
+
+                complaint = Complaint(date=date, rank_at_time=rank_at_the_time_of_incident,
+                                      officer_details=officer_details,
+                                      complaint_details=complainant_details, allegations=allegations,
+                                      ccrb_conclusion=conclusion)
+
+                complaints.append(complaint)
+        return complaints
+
+    def get_more_details(self, soup: BeautifulSoup) -> list:
+        list_of_more_details = []
+        elements = soup.find_all("div", class_="mb5")
+        for element in elements:
+            a = element.find("a")
+            url_of_element = a.get("href")
+            list_of_more_details.append(url_of_element)
+            # complaints_for_period = []
+            # for link in more_details:
+            #     response = self.make_request(link)
+            #     complaints_for_period.append(response)
+        return list_of_more_details
 
     @staticmethod
     def get_fullname(soup: BeautifulSoup):
@@ -156,10 +213,6 @@ class Crawler:
         res = int(total_allegations)
         return res
 
-    # if info:
-    #     info = info.split(',')
-    # rank = info[0].strip()
-
     @staticmethod
     def get_number_of_substantiated_allegations(soup: BeautifulSoup):
         all_divs = soup.find_all("div", class_="f4-l f5 lh-title tiempos-text")
@@ -191,7 +244,6 @@ class Crawler:
     #         #     row = i.text
     #     return td
 
-
     @staticmethod
     def get_rank_at_time(soup: BeautifulSoup):
         list_of_ranks = []
@@ -206,7 +258,7 @@ class Crawler:
                     rank_at_time = all_row[3]
                     list_of_ranks.append(rank_at_time)
 
-            return list_of_ranks
+        return list_of_ranks
 
     # @staticmethod
     # def get_rank_at_time(soup: BeautifulSoup):
@@ -220,7 +272,7 @@ class Crawler:
     #     return rank_at_time
 
     @staticmethod
-    def get_complainant_info(soup: BeautifulSoup):
+    def get_info_about_complainant(soup: BeautifulSoup):
         content = soup.find("table", class_="table medium tablesaw-stack f6 bg")
         body = content.find("tbody")
         rows = body.find_all("tr")
